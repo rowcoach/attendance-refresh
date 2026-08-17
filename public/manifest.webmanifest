@@ -1,0 +1,11 @@
+{
+  "name": "TAP4Teams",
+  "short_name": "TAP4Teams",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
+  ]
+}
