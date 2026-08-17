@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   getSessions,
   createSession,
+  updateSession,
   cancelSession,
   deleteSession,
   getSeasons,
@@ -22,6 +23,7 @@ type Group = { id: string; name: string };
 export function ScheduleTab({ groups }: { groups: Group[] }) {
   const listSessions = useServerFn(getSessions);
   const addSession = useServerFn(createSession);
+  const editSession = useServerFn(updateSession);
   const cancel = useServerFn(cancelSession);
   const remove = useServerFn(deleteSession);
   const listSeasons = useServerFn(getSeasons);
@@ -68,6 +70,48 @@ export function ScheduleTab({ groups }: { groups: Group[] }) {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatEndDate, setRepeatEndDate] = useState("");
   const [expected, setExpected] = useState<string[]>([]);
+  const [isScored, setIsScored] = useState(true);
+
+  const [editing, setEditing] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editGroups, setEditGroups] = useState<string[]>([]);
+  const [editScored, setEditScored] = useState(true);
+
+  function openEdit(session: any) {
+    setEditing(session);
+    setEditName(session.name ?? "");
+    setEditLocation(session.location_reference ?? "");
+    const date = new Date(session.scheduled_time);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setEditTime(
+      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`,
+    );
+    setEditGroups((session.expected_group_ids ?? []) as string[]);
+    setEditScored(session.is_scored !== false);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    try {
+      await editSession({
+        data: {
+          sessionId: editing.id,
+          name: editName,
+          locationReference: editLocation,
+          scheduledTime: editTime,
+          expectedGroupIds: editGroups,
+          isScored: editScored,
+        },
+      });
+      toast.success("Session updated.");
+      setEditing(null);
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update that session.");
+    }
+  }
 
   const [seasonName, setSeasonName] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -177,6 +221,14 @@ export function ScheduleTab({ groups }: { groups: Group[] }) {
             />
             Repeat weekly
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isScored}
+              onChange={(e) => setIsScored(e.target.checked)}
+            />
+            Scored practice
+          </label>
           {repeatWeekly ? (
             <Input
               type="date"
@@ -194,6 +246,7 @@ export function ScheduleTab({ groups }: { groups: Group[] }) {
                 expectedGroupIds: expected,
                 repeatWeekly,
                 repeatEndDate: repeatWeekly ? repeatEndDate || null : null,
+                isScored,
               })
             }
           >
@@ -211,12 +264,16 @@ export function ScheduleTab({ groups }: { groups: Group[] }) {
                 <p className="truncate font-medium">
                   {session.name}
                   {session.is_cancelled ? " · cancelled" : ""}
+                  {session.is_scored === false ? " · unscored" : ""}
                 </p>
                 <p className="data-num text-xs text-muted-foreground">
                   {formatDate(session.scheduled_time)} · {formatTime(session.scheduled_time)}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
+                <Button size="sm" variant="outline" onClick={() => openEdit(session)}>
+                  Edit
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -244,6 +301,81 @@ export function ScheduleTab({ groups }: { groups: Group[] }) {
           ))}
         </ul>
       </section>
+
+      {editing ? (
+        <section className="card-hairline rounded-xl p-4">
+          <h2 className="font-display text-2xl uppercase leading-none">Edit session</h2>
+          <div className="mt-3 space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input
+                  maxLength={60}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Location note</Label>
+                <Input
+                  maxLength={80}
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Date and time</Label>
+              <Input
+                type="datetime-local"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {groups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() =>
+                    setEditGroups((prev) =>
+                      prev.includes(group.id)
+                        ? prev.filter((id) => id !== group.id)
+                        : [...prev, group.id],
+                    )
+                  }
+                  className={`label-caps rounded-full border px-3 py-1 text-xs ${
+                    editGroups.includes(group.id)
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border"
+                  }`}
+                >
+                  {group.name}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editScored}
+                onChange={(e) => setEditScored(e.target.checked)}
+              />
+              Scored practice
+            </label>
+            <div className="flex gap-2">
+              <Button disabled={!editName || !editTime} onClick={saveEdit}>
+                Save changes
+              </Button>
+              <Button variant="ghost" onClick={() => setEditing(null)}>
+                Cancel edit
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only this session changes — repeats stay as they are.
+            </p>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

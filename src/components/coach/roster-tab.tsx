@@ -95,9 +95,11 @@ export function RosterTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusPill status={row.status} />
-                  <span className="data-num text-xs">
-                    {formatPoints(Number(row.punctuality_points ?? 0))}
-                  </span>
+                  {row.punctuality_visible !== false ? (
+                    <span className="data-num text-xs">
+                      {formatPoints(Number(row.punctuality_points ?? 0))}
+                    </span>
+                  ) : null}
                 </div>
               </li>
             ))}

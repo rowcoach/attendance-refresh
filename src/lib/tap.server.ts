@@ -70,6 +70,7 @@ export async function closeDueSessions(db: Admin, teamId: string) {
     .select("id, expected_group_ids")
     .eq("team_id", teamId)
     .eq("is_cancelled", false)
+    .eq("is_scored", true)
     .is("closed_at", null)
     .lt("scheduled_time", cutoff);
   if (!due?.length) return;

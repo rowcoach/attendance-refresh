@@ -13,7 +13,12 @@ import {
   sixDigitCode,
 } from "./tap.server";
 import { normalizePhone } from "./format";
-import { SESSION_WINDOW_MS, matchSession, punctualityPoints } from "./scoring";
+import {
+  WINDOW_AFTER_MS,
+  WINDOW_BEFORE_MS,
+  matchSession,
+  punctualityPoints,
+} from "./scoring";
 import { distanceMeters } from "./format";
 
 /** Look up a QR token so the landing page knows what it is. */
@@ -66,6 +71,15 @@ export const requestAthleteCode = createServerFn({ method: "POST" })
     if (!qr || qr.type !== "signup") throw new Error("This signup link is not valid.");
 
     const phone = normalizePhone(data.phone);
+    const hourAgo = new Date(Date.now() - 3600000).toISOString();
+    const { count: recentCount } = await db
+      .from("phone_verifications")
+      .select("id", { count: "exact", head: true })
+      .eq("phone", phone)
+      .gte("created_at", hourAgo);
+    if ((recentCount ?? 0) >= 3) {
+      throw new Error("Too many codes requested. Try again in an hour.");
+    }
     const code = sixDigitCode();
     await db.from("phone_verifications").insert({ phone, team_id: qr.team_id, code });
     await sendSms(phone, `Your TAP4Teams verification code is ${code}`);
@@ -98,18 +112,26 @@ export const verifyAthleteCode = createServerFn({ method: "POST" })
 
     const { data: verification } = await db
       .from("phone_verifications")
-      .select("id, code, expires_at, consumed_at")
+      .select("id, code, expires_at, consumed_at, attempts")
       .eq("phone", phone)
       .is("consumed_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (
-      !verification ||
-      verification.code !== data.code ||
-      new Date(verification.expires_at) < new Date()
-    ) {
+    if (!verification || new Date(verification.expires_at) < new Date()) {
       throw new Error("That code is not right or has expired. Ask for a new one.");
+    }
+    if ((verification.attempts ?? 0) >= 5) {
+      throw new Error("Too many wrong tries on that code. Ask for a new one.");
+    }
+    if (verification.code !== data.code) {
+      const attempts = (verification.attempts ?? 0) + 1;
+      await db.from("phone_verifications").update({ attempts }).eq("id", verification.id);
+      throw new Error(
+        attempts >= 5
+          ? "Too many wrong tries on that code. Ask for a new one."
+          : "That code is not right or has expired. Ask for a new one.",
+      );
     }
     await db
       .from("phone_verifications")
@@ -284,7 +306,7 @@ export const getAthleteSessions = createServerFn({ method: "POST" })
     const { data: rows } = await db
       .from("attendance")
       .select(
-        "id, status, scan_time, punctuality_points, sessions(id, name, scheduled_time, location_reference)",
+        "id, status, scan_time, punctuality_points, punctuality_visible, sessions(id, name, scheduled_time, location_reference)",
       )
       .eq("user_id", me.id)
       .order("created_at", { ascending: false })
@@ -355,22 +377,22 @@ export const processScan = createServerFn({ method: "POST" })
         { lat: data.lat, lng: data.lng },
         { lat: location.latitude, lng: location.longitude },
       );
-      if (meters > 60) return { result: "too_far" as const };
+      if (meters > 30) return { result: "too_far" as const };
     }
 
     await closeDueSessions(db, qr.team_id);
 
-    const windowStart = new Date(now.getTime() - SESSION_WINDOW_MS).toISOString();
-    const windowEnd = new Date(now.getTime() + SESSION_WINDOW_MS).toISOString();
+    const windowStart = new Date(now.getTime() - WINDOW_AFTER_MS).toISOString();
+    const windowEnd = new Date(now.getTime() + WINDOW_BEFORE_MS).toISOString();
     let query = db
       .from("sessions")
-      .select("id, name, scheduled_time, is_cancelled, expected_group_ids")
+      .select("id, name, scheduled_time, is_cancelled, expected_group_ids, is_scored")
       .eq("team_id", qr.team_id)
       .eq("is_cancelled", false)
       .gte("scheduled_time", windowStart)
       .lte("scheduled_time", windowEnd);
     const { data: candidates } = await query;
-    const session = matchSession(candidates ?? [], now);
+    const session = matchSession(candidates ?? [], now, me.group_id ?? null);
 
     await db.from("scans").insert({
       user_id: me.id,
@@ -383,26 +405,62 @@ export const processScan = createServerFn({ method: "POST" })
     });
 
     if (!session) {
+      const { data: anyCandidate } = await db
+        .from("sessions")
+        .select("id")
+        .eq("team_id", qr.team_id)
+        .eq("is_cancelled", false)
+        .gte("scheduled_time", windowStart)
+        .lte("scheduled_time", windowEnd)
+        .limit(1);
       return {
         result: "logged" as const,
         time: now.toISOString(),
         locationName: location?.name ?? null,
+        message: (anyCandidate ?? []).length
+          ? "Scan logged — outside your group's check-in window."
+          : "Scan logged — outside the check-in window.",
       };
     }
 
-    const points = punctualityPoints(session.scheduled_time, now);
-    await db.from("attendance").upsert(
-      {
+    const { data: existingAttendance } = await db
+      .from("attendance")
+      .select("id, scan_time, punctuality_points, punctuality_visible")
+      .eq("user_id", me.id)
+      .eq("session_id", session.id)
+      .maybeSingle();
+
+    const scored = session.is_scored !== false;
+
+    if (existingAttendance) {
+      const originalTime = existingAttendance.scan_time ?? now.toISOString();
+      return {
+        result: "already" as const,
+        time: originalTime,
+        locationName: location?.name ?? null,
+        sessionName: session.name,
+        points: Number(existingAttendance.punctuality_points ?? 0),
+        showPoints:
+          scored &&
+          (team?.punctuality_enabled ?? true) &&
+          existingAttendance.punctuality_visible !== false,
+        message: `Already checked in at ${new Date(originalTime).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        })}`,
+      };
+    }
+
+    const points = scored ? punctualityPoints(session.scheduled_time, now) : 0;
+    await db.from("attendance").insert({
         user_id: me.id,
         session_id: session.id,
         team_id: qr.team_id,
         status: "present",
         scan_time: now.toISOString(),
         punctuality_points: points,
-        punctuality_visible: team?.punctuality_enabled ?? true,
-      },
-      { onConflict: "user_id,session_id" },
-    );
+      punctuality_visible: scored && (team?.punctuality_enabled ?? true),
+    });
 
     return {
       result: "checked_in" as const,
@@ -410,6 +468,6 @@ export const processScan = createServerFn({ method: "POST" })
       locationName: location?.name ?? null,
       sessionName: session.name,
       points,
-      showPoints: team?.punctuality_enabled ?? true,
+      showPoints: scored && (team?.punctuality_enabled ?? true),
     };
   });

@@ -154,7 +154,7 @@ function Bucket({
                       {formatTime(record.scan_time)}
                     </span>
                   ) : null}
-                  {record ? (
+                  {record && record.punctuality_visible !== false ? (
                     <span className="data-num text-xs">
                       {formatPoints(Number(record.punctuality_points ?? 0))}
                     </span>

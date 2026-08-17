@@ -263,7 +263,7 @@ export const getAthleteDetail = createServerFn({ method: "POST" })
     const { data: rows } = await db
       .from("attendance")
       .select(
-        "id, status, scan_time, punctuality_points, sessions(id, name, scheduled_time, location_reference)",
+        "id, status, scan_time, punctuality_points, punctuality_visible, sessions(id, name, scheduled_time, location_reference)",
       )
       .eq("user_id", data.userId)
       .limit(300);

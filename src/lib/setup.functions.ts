@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
 import { requireAdmin } from "./coach.server";
+import { backfillFromScans } from "./session-backfill.server";
 
 export const updateTeamSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -259,6 +260,7 @@ export const createSession = createServerFn({ method: "POST" })
         expectedGroupIds: z.array(z.string().uuid()).default([]),
         repeatWeekly: z.boolean().default(false),
         repeatEndDate: z.string().nullable().default(null),
+        isScored: z.boolean().default(true),
       })
       .parse(d),
   )
@@ -282,7 +284,9 @@ export const createSession = createServerFn({ method: "POST" })
       }
     }
     const repeatGroupId = crypto.randomUUID();
-    await db.from("sessions").insert(
+    const { data: inserted } = await db
+      .from("sessions")
+      .insert(
       dates.map((date) => ({
         team_id: teamId,
         season_id: season?.id ?? null,
@@ -293,9 +297,50 @@ export const createSession = createServerFn({ method: "POST" })
         repeat_end_date: data.repeatEndDate,
         repeat_group_id: data.repeatWeekly ? repeatGroupId : null,
         expected_group_ids: data.expectedGroupIds,
+          is_scored: data.isScored,
       })),
-    );
+      )
+      .select("id, scheduled_time, expected_group_ids, is_scored");
+
+    // Backdated sessions: adopt already-logged scans that fall in their window.
+    for (const session of inserted ?? []) {
+      if (new Date(session.scheduled_time) < new Date()) {
+        await backfillFromScans(db, teamId, session);
+      }
+    }
     return { created: dates.length };
+  });
+
+/** Edit a single session without touching its repeat siblings. */
+export const updateSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        sessionId: z.string().uuid(),
+        name: z.string().trim().min(1).max(60),
+        locationReference: z.string().trim().max(80).default(""),
+        scheduledTime: z.string().min(10),
+        expectedGroupIds: z.array(z.string().uuid()).default([]),
+        isScored: z.boolean().default(true),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { db, teamId } = await requireAdmin(context.userId);
+    const { error } = await db
+      .from("sessions")
+      .update({
+        name: data.name,
+        location_reference: data.locationReference || null,
+        scheduled_time: new Date(data.scheduledTime).toISOString(),
+        expected_group_ids: data.expectedGroupIds,
+        is_scored: data.isScored,
+      })
+      .eq("id", data.sessionId)
+      .eq("team_id", teamId);
+    if (error) throw new Error("Could not update that session.");
+    return { ok: true };
   });
 
 export const cancelSession = createServerFn({ method: "POST" })
