@@ -220,7 +220,7 @@ export const getRoster = createServerFn({ method: "POST" })
     const totals = await seasonTotals(db, teamId, sessionIds);
     const { data: athletes } = await db
       .from("users")
-      .select("id, first_name, last_name, phone, group_id, is_active, is_test_account")
+      .select("id, first_name, last_name, phone, group_id, is_active, is_test_account, sms_opt_in")
       .eq("team_id", teamId)
       .eq("role", "athlete")
       .order("last_name");
@@ -340,7 +340,8 @@ export const sendMegaphone = createServerFn({ method: "POST" })
       .eq("role", "athlete")
       .eq("is_active", true)
       .eq("is_test_account", false)
-      .not("phone", "is", null);
+      .not("phone", "is", null)
+      .eq("sms_opt_in", true);
     if (data.targetType === "group" && data.groupId) query = query.eq("group_id", data.groupId);
     if (data.targetType === "selected") query = query.in("id", data.userIds);
     const { data: recipients } = await query;
