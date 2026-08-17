@@ -81,7 +81,7 @@ function HistoryPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <StatusPill status={row.status} />
-              {data?.team?.punctuality_enabled ? (
+              {data?.team?.punctuality_enabled && row.punctuality_visible !== false ? (
                 <span className="data-num text-xs">
                   {formatPoints(Number(row.punctuality_points ?? 0))}
                 </span>
