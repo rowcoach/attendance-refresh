@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
 import { requireAdmin } from "./coach.server";
+import { WINDOW_AFTER_MS, WINDOW_BEFORE_MS, punctualityPoints } from "./scoring";
 
 export const updateTeamSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -259,6 +260,7 @@ export const createSession = createServerFn({ method: "POST" })
         expectedGroupIds: z.array(z.string().uuid()).default([]),
         repeatWeekly: z.boolean().default(false),
         repeatEndDate: z.string().nullable().default(null),
+        isScored: z.boolean().default(true),
       })
       .parse(d),
   )
@@ -282,7 +284,9 @@ export const createSession = createServerFn({ method: "POST" })
       }
     }
     const repeatGroupId = crypto.randomUUID();
-    await db.from("sessions").insert(
+    const { data: inserted } = await db
+      .from("sessions")
+      .insert(
       dates.map((date) => ({
         team_id: teamId,
         season_id: season?.id ?? null,
@@ -293,9 +297,124 @@ export const createSession = createServerFn({ method: "POST" })
         repeat_end_date: data.repeatEndDate,
         repeat_group_id: data.repeatWeekly ? repeatGroupId : null,
         expected_group_ids: data.expectedGroupIds,
+          is_scored: data.isScored,
       })),
-    );
+      )
+      .select("id, scheduled_time, expected_group_ids, is_scored");
+
+    // Backdated sessions: adopt already-logged scans that fall in their window.
+    for (const session of inserted ?? []) {
+      if (new Date(session.scheduled_time) < new Date()) {
+        await backfillFromScans(db, teamId, session);
+      }
+    }
     return { created: dates.length };
+  });
+
+/** Turn loose scans inside a backdated session's window into attendance rows. */
+async function backfillFromScans(
+  db: any,
+  teamId: string,
+  session: { id: string; scheduled_time: string; expected_group_ids: string[]; is_scored: boolean },
+) {
+  const scheduled = new Date(session.scheduled_time).getTime();
+  const from = new Date(scheduled - WINDOW_BEFORE_MS).toISOString();
+  const to = new Date(scheduled + WINDOW_AFTER_MS).toISOString();
+
+  const { data: scans } = await db
+    .from("scans")
+    .select("id, user_id, scan_time")
+    .eq("team_id", teamId)
+    .is("session_id", null)
+    .eq("is_adhoc", false)
+    .gte("scan_time", from)
+    .lte("scan_time", to)
+    .order("scan_time");
+  if (!scans?.length) return;
+
+  const groups = (session.expected_group_ids ?? []) as string[];
+  let athleteQuery = db
+    .from("users")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("role", "athlete")
+    .in("id", [...new Set(scans.map((s: any) => s.user_id))]);
+  if (groups.length) athleteQuery = athleteQuery.in("group_id", groups);
+  const { data: eligible } = await athleteQuery;
+  const allowed = new Set((eligible ?? []).map((a: any) => a.id));
+  if (!allowed.size) return;
+
+  const { data: team } = await db
+    .from("teams")
+    .select("punctuality_enabled")
+    .eq("id", teamId)
+    .maybeSingle();
+  const { data: existing } = await db
+    .from("attendance")
+    .select("user_id")
+    .eq("session_id", session.id);
+  const already = new Set((existing ?? []).map((r: any) => r.user_id));
+
+  const firstScan = new Map<string, string>();
+  for (const scan of scans) {
+    if (!allowed.has(scan.user_id) || already.has(scan.user_id)) continue;
+    if (!firstScan.has(scan.user_id)) firstScan.set(scan.user_id, scan.scan_time);
+  }
+  if (!firstScan.size) return;
+
+  const scored = session.is_scored !== false;
+  await db.from("attendance").insert(
+    [...firstScan.entries()].map(([userId, scanTime]) => ({
+      user_id: userId,
+      session_id: session.id,
+      team_id: teamId,
+      status: "present" as const,
+      scan_time: scanTime,
+      punctuality_points: scored ? punctualityPoints(session.scheduled_time, scanTime) : 0,
+      punctuality_visible: scored && (team?.punctuality_enabled ?? true),
+    })),
+  );
+  await db
+    .from("scans")
+    .update({ session_id: session.id })
+    .in(
+      "id",
+      scans
+        .filter((s: any) => firstScan.get(s.user_id) === s.scan_time)
+        .map((s: any) => s.id),
+    );
+}
+
+/** Edit a single session without touching its repeat siblings. */
+export const updateSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        sessionId: z.string().uuid(),
+        name: z.string().trim().min(1).max(60),
+        locationReference: z.string().trim().max(80).default(""),
+        scheduledTime: z.string().min(10),
+        expectedGroupIds: z.array(z.string().uuid()).default([]),
+        isScored: z.boolean().default(true),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { db, teamId } = await requireAdmin(context.userId);
+    const { error } = await db
+      .from("sessions")
+      .update({
+        name: data.name,
+        location_reference: data.locationReference || null,
+        scheduled_time: new Date(data.scheduledTime).toISOString(),
+        expected_group_ids: data.expectedGroupIds,
+        is_scored: data.isScored,
+      })
+      .eq("id", data.sessionId)
+      .eq("team_id", teamId);
+    if (error) throw new Error("Could not update that session.");
+    return { ok: true };
   });
 
 export const cancelSession = createServerFn({ method: "POST" })
