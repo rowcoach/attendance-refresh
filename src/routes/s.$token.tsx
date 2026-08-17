@@ -196,6 +196,7 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [groupId, setGroupId] = useState<string | null>(info.groups?.[0]?.id ?? null);
+  const [smsConsent, setSmsConsent] = useState(false);
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [busy, setBusy] = useState(false);
 
