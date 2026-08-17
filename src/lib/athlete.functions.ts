@@ -97,6 +97,7 @@ export const verifyAthleteCode = createServerFn({ method: "POST" })
         phone: z.string().trim().min(7).max(20),
         code: z.string().trim().length(6),
         groupId: z.string().uuid().nullable(),
+        smsOptIn: z.boolean().default(false),
       })
       .parse(d),
   )
@@ -165,6 +166,7 @@ export const verifyAthleteCode = createServerFn({ method: "POST" })
           last_name: data.lastName,
           group_id: groupId,
           is_active: true,
+          sms_opt_in: data.smsOptIn,
         })
         .eq("id", userId);
     } else {
@@ -177,6 +179,7 @@ export const verifyAthleteCode = createServerFn({ method: "POST" })
           role: "athlete",
           team_id: qr.team_id,
           group_id: groupId,
+          sms_opt_in: data.smsOptIn,
         })
         .select("id")
         .single();
