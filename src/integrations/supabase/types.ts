@@ -624,6 +624,7 @@ export type Database = {
           last_name: string
           phone: string | null
           role: Database["public"]["Enums"]["app_role"]
+          sms_opt_in: boolean
           team_id: string | null
         }
         Insert: {
@@ -639,6 +640,7 @@ export type Database = {
           last_name: string
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          sms_opt_in?: boolean
           team_id?: string | null
         }
         Update: {
@@ -654,6 +656,7 @@ export type Database = {
           last_name?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          sms_opt_in?: boolean
           team_id?: string | null
         }
         Relationships: [
