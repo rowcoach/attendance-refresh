@@ -169,6 +169,8 @@ function headline(result: ScanResult) {
   switch (result?.result) {
     case "checked_in":
       return "You're in";
+    case "already":
+      return "Already in";
     case "adhoc":
       return "Scan logged";
     case "logged":
