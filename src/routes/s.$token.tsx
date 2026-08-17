@@ -271,10 +271,19 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
-            <p className="text-xs leading-snug text-muted-foreground">
-              We'll text this number a one-time code to verify it's yours. Msg &amp; data rates may
-              apply.
-            </p>
+            <label className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
+              <input
+                type="checkbox"
+                required
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
+                checked={smsConsent}
+                onChange={(e) => setSmsConsent(e.target.checked)}
+              />
+              <span>
+                I agree to receive a one-time verification code and team messages via SMS. Msg &amp;
+                data rates may apply. Reply STOP to opt out.
+              </span>
+            </label>
           </div>
           <div className="space-y-1.5">
             <label className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
