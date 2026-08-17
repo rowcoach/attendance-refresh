@@ -34,9 +34,27 @@ export function ScreenHeader({
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background pb-16">
-      <div className="mx-auto w-full max-w-3xl px-4">{children}</div>
+    <div className="flex min-h-screen flex-col bg-background">
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4">{children}</div>
+      <Footer />
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="border-t border-border bg-card py-4 text-center">
+      <p className="text-xs text-muted-foreground">
+        Powered by TAP4Teams ·{" "}
+        <Link to="/privacy" className="underline hover:text-foreground">
+          Privacy
+        </Link>{" "}
+        ·{" "}
+        <Link to="/terms" className="underline hover:text-foreground">
+          Terms
+        </Link>
+      </p>
+    </footer>
   );
 }
 

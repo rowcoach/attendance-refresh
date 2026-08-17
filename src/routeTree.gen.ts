@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCoachRouteImport } from './routes/_authenticated/coach'
 import { Route as STokenRouteImport } from './routes/s.$token'
 
@@ -35,6 +37,16 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedCoachRoute = AuthenticatedCoachRouteImport.update({
   id: '/coach',
   path: '/coach',
@@ -50,6 +62,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/history': typeof HistoryRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/coach': typeof AuthenticatedCoachRoute
   '/s/$token': typeof STokenRoute
 }
@@ -57,6 +71,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/history': typeof HistoryRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/coach': typeof AuthenticatedCoachRoute
   '/s/$token': typeof STokenRoute
 }
@@ -66,20 +82,26 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/history': typeof HistoryRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/_authenticated/coach': typeof AuthenticatedCoachRoute
   '/s/$token': typeof STokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/history' | '/coach' | '/s/$token'
+  fullPaths:
+    '/' | '/auth' | '/history' | '/privacy' | '/terms' | '/coach' | '/s/$token'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/history' | '/coach' | '/s/$token'
+  to:
+    '/' | '/auth' | '/history' | '/privacy' | '/terms' | '/coach' | '/s/$token'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/history'
+    | '/privacy'
+    | '/terms'
     | '/_authenticated/coach'
     | '/s/$token'
   fileRoutesById: FileRoutesById
@@ -89,6 +111,8 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   HistoryRoute: typeof HistoryRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   STokenRoute: typeof STokenRoute
 }
 
@@ -120,6 +144,20 @@ declare module '@tanstack/react-router' {
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/coach': {
@@ -155,6 +193,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   HistoryRoute: HistoryRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   STokenRoute: STokenRoute,
 }
 export const routeTree = rootRouteImport

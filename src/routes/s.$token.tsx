@@ -269,6 +269,10 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
+            <p className="text-xs leading-snug text-muted-foreground">
+              By joining, you agree to receive a one-time verification code and team messages via SMS.
+              Msg & data rates may apply. Reply STOP to opt out.
+            </p>
           </div>
           {info.groups?.length && !info.qr.group_id ? (
             <div className="space-y-1.5">
