@@ -146,6 +146,9 @@ function ScanPage() {
             ) : null}
           </>
         ) : null}
+        {result && "message" in result && result.message ? (
+          <p className="text-muted-foreground">{result.message}</p>
+        ) : null}
         {result?.result === "too_far" ? (
           <p className="text-muted-foreground">
             You're not close enough to the location yet. Move closer and scan again.
