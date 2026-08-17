@@ -196,6 +196,7 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [groupId, setGroupId] = useState<string | null>(info.groups?.[0]?.id ?? null);
+  const [smsOptIn, setSmsOptIn] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function sendCode(event: React.FormEvent) {
@@ -217,7 +218,7 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
     setBusy(true);
     try {
       const outcome = await verify({
-        data: { token, firstName, lastName, phone, code, groupId },
+        data: { token, firstName, lastName, phone, code, groupId, smsOptIn },
       });
       setDeviceToken(outcome.deviceToken);
       toast.success(`Welcome, ${outcome.firstName}.`);
@@ -270,8 +271,32 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
               onChange={(e) => setPhone(e.target.value)}
             />
             <p className="text-xs leading-snug text-muted-foreground">
-              By joining, you agree to receive a one-time verification code and team messages via SMS.
-              Msg & data rates may apply. Reply STOP to opt out.
+              We'll text this number a one-time code to verify it's yours. Msg &amp; data rates may
+              apply.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
+                checked={smsOptIn}
+                onChange={(e) => setSmsOptIn(e.target.checked)}
+              />
+              <span>
+                Also send me team announcements from my coach by SMS (practice changes, reminders).
+                Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP
+                for help.
+              </span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              <a href="/privacy" className="underline">
+                Privacy Policy
+              </a>
+              {" · "}
+              <a href="/terms" className="underline">
+                Terms
+              </a>
             </p>
           </div>
           {info.groups?.length && !info.qr.group_id ? (
