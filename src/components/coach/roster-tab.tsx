@@ -52,6 +52,11 @@ export function RosterTab() {
               <p className="truncate font-medium">
                 {athlete.first_name} {athlete.last_name}
                 {athlete.is_test_account ? " (test)" : ""}
+                {athlete.sms_opt_in ? null : (
+                  <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                    no SMS
+                  </span>
+                )}
               </p>
               <p className="data-num text-xs text-muted-foreground">
                 {athlete.totals.percent}% · {formatPoints(athlete.totals.points)} pts
