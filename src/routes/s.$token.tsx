@@ -325,7 +325,7 @@ function SignupFlow({ token, info }: { token: string; info: any }) {
               </select>
             </div>
           ) : null}
-          <Button type="submit" className="w-full" disabled={busy}>
+          <Button type="submit" className="w-full" disabled={busy || !smsConsent}>
             Text me a code
           </Button>
         </form>
