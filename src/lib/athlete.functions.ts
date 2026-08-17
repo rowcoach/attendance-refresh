@@ -13,7 +13,12 @@ import {
   sixDigitCode,
 } from "./tap.server";
 import { normalizePhone } from "./format";
-import { SESSION_WINDOW_MS, matchSession, punctualityPoints } from "./scoring";
+import {
+  WINDOW_AFTER_MS,
+  WINDOW_BEFORE_MS,
+  matchSession,
+  punctualityPoints,
+} from "./scoring";
 import { distanceMeters } from "./format";
 
 /** Look up a QR token so the landing page knows what it is. */
@@ -66,6 +71,15 @@ export const requestAthleteCode = createServerFn({ method: "POST" })
     if (!qr || qr.type !== "signup") throw new Error("This signup link is not valid.");
 
     const phone = normalizePhone(data.phone);
+    const hourAgo = new Date(Date.now() - 3600000).toISOString();
+    const { count: recentCount } = await db
+      .from("phone_verifications")
+      .select("id", { count: "exact", head: true })
+      .eq("phone", phone)
+      .gte("created_at", hourAgo);
+    if ((recentCount ?? 0) >= 3) {
+      throw new Error("Too many codes requested. Try again in an hour.");
+    }
     const code = sixDigitCode();
     await db.from("phone_verifications").insert({ phone, team_id: qr.team_id, code });
     await sendSms(phone, `Your TAP4Teams verification code is ${code}`);
@@ -98,18 +112,26 @@ export const verifyAthleteCode = createServerFn({ method: "POST" })
 
     const { data: verification } = await db
       .from("phone_verifications")
-      .select("id, code, expires_at, consumed_at")
+      .select("id, code, expires_at, consumed_at, attempts")
       .eq("phone", phone)
       .is("consumed_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (
-      !verification ||
-      verification.code !== data.code ||
-      new Date(verification.expires_at) < new Date()
-    ) {
+    if (!verification || new Date(verification.expires_at) < new Date()) {
       throw new Error("That code is not right or has expired. Ask for a new one.");
+    }
+    if ((verification.attempts ?? 0) >= 5) {
+      throw new Error("Too many wrong tries on that code. Ask for a new one.");
+    }
+    if (verification.code !== data.code) {
+      const attempts = (verification.attempts ?? 0) + 1;
+      await db.from("phone_verifications").update({ attempts }).eq("id", verification.id);
+      throw new Error(
+        attempts >= 5
+          ? "Too many wrong tries on that code. Ask for a new one."
+          : "That code is not right or has expired. Ask for a new one.",
+      );
     }
     await db
       .from("phone_verifications")
