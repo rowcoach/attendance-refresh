@@ -405,6 +405,7 @@ export type Database = {
           expected_group_ids: string[]
           id: string
           is_cancelled: boolean
+          is_scored: boolean
           location_reference: string | null
           name: string
           repeat_end_date: string | null
@@ -420,6 +421,7 @@ export type Database = {
           expected_group_ids?: string[]
           id?: string
           is_cancelled?: boolean
+          is_scored?: boolean
           location_reference?: string | null
           name: string
           repeat_end_date?: string | null
@@ -435,6 +437,7 @@ export type Database = {
           expected_group_ids?: string[]
           id?: string
           is_cancelled?: boolean
+          is_scored?: boolean
           location_reference?: string | null
           name?: string
           repeat_end_date?: string | null
