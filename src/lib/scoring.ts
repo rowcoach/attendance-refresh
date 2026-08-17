@@ -1,6 +1,8 @@
 /** Punctuality scoring math. Always calculated; only surfaced when the team toggle is on. */
 
-export const SESSION_WINDOW_MS = 60 * 60 * 1000; // 1 hour before / after
+export const SESSION_WINDOW_MS = 60 * 60 * 1000; // 1 hour (close job window)
+export const WINDOW_BEFORE_MS = 3 * 60 * 60 * 1000; // scan may come 3 hours before start
+export const WINDOW_AFTER_MS = 60 * 60 * 1000; // and up to 1 hour after
 export const UNEXCUSED_POINTS = -45;
 export const MAX_SESSION_POINTS = 22.5;
 export const MIN_SCANNED_POINTS = -30;
@@ -31,18 +33,35 @@ export function formatPoints(points: number): string {
   return `${sign}${Math.abs(points).toFixed(1)}`;
 }
 
-/** Pick the session whose scheduled time is nearest the scan, within the window. */
-export function matchSession<T extends { scheduled_time: string; is_cancelled: boolean }>(
-  sessions: T[],
-  scanTime: Date,
-): T | null {
+/** True when the scan falls inside a session's check-in window. */
+export function inWindow(scheduledTime: string | Date, scanTime: Date): boolean {
+  const scheduled = new Date(scheduledTime).getTime();
+  const scan = scanTime.getTime();
+  return scan >= scheduled - WINDOW_BEFORE_MS && scan <= scheduled + WINDOW_AFTER_MS;
+}
+
+/**
+ * Pick the session whose scheduled time is nearest the scan, within the window.
+ * Strictly group-siloed: a session only matches when its expected groups include
+ * the athlete's group, or when it has no expected groups (whole-team session).
+ */
+export function matchSession<
+  T extends {
+    scheduled_time: string;
+    is_cancelled: boolean;
+    expected_group_ids?: string[] | null;
+  },
+>(sessions: T[], scanTime: Date, groupId: string | null): T | null {
   const scan = scanTime.getTime();
   let best: T | null = null;
   let bestDelta = Infinity;
   for (const session of sessions) {
     if (session.is_cancelled) continue;
+    const groups = (session.expected_group_ids ?? []) as string[];
+    if (groups.length > 0 && (!groupId || !groups.includes(groupId))) continue;
+    if (!inWindow(session.scheduled_time, scanTime)) continue;
     const delta = Math.abs(new Date(session.scheduled_time).getTime() - scan);
-    if (delta <= SESSION_WINDOW_MS && delta < bestDelta) {
+    if (delta < bestDelta) {
       best = session;
       bestDelta = delta;
     }
